@@ -42,7 +42,7 @@ $compilerArguments = @(
     '/reference:System.Web.Extensions.dll'
 ) + $sources
 
-Write-Output '正在构建奶蛙桌宠 1.3.2（Windows x64）……'
+Write-Output '正在构建奶蛙桌宠 1.3.3（Windows x64）……'
 & $compiler @compilerArguments
 if ($LASTEXITCODE -ne 0) { throw ('编译失败，退出码：' + $LASTEXITCODE) }
 
@@ -53,7 +53,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot 'THIRD_PARTY_NOTICES.md') -Destinati
 
 $usage = @'
 奶蛙桌宠
-版本：1.3.2
+版本：1.3.3
 
 开始使用
 1. 先把压缩包完整解压到任意文件夹。

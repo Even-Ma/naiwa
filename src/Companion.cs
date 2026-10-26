@@ -197,7 +197,7 @@ namespace NaiwaDesktop
                 using (Pen pen = new Pen(CompanionStyle.Muted)) { pen.DashStyle = DashStyle.Dot; using (GraphicsPath p = CompanionStyle.Rounded(new RectangleF(3, 3, Width - 7, Height - 7), 7)) g.DrawPath(pen, p); }
         }
 
-        // Action buttons share a quiet surface, a thin outline and hand drawn
+        // Action buttons share a flat, borderless surface and hand drawn
         // glyphs. Their state uses the panel's existing refresh cycle, without
         // a per-button animation timer or a native focus/default-button frame.
         private void PaintAction(Graphics g)
@@ -205,35 +205,27 @@ namespace NaiwaDesktop
             g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
             float unit = g.DpiX / 96f;
             bool down = Enabled && (pressed && over || keyPressed);
-            bool hover = Enabled && over;
+            bool hover = Enabled && (over || Focused && ShowFocusCues);
             Color fill = Accent ? Color.FromArgb(250, 240, 207) : Color.FromArgb(243, 246, 235);
-            Color line = Accent ? Color.FromArgb(225, 210, 163) : Color.FromArgb(218, 227, 204);
             Color ink = CompanionStyle.Green;
             if (hover)
             {
                 fill = Accent ? Color.FromArgb(246, 226, 168) : Color.FromArgb(232, 239, 218);
-                line = Accent ? Color.FromArgb(195, 169, 99) : Color.FromArgb(157, 177, 135);
             }
             if (down)
             {
                 fill = Accent ? Color.FromArgb(239, 215, 149) : Color.FromArgb(220, 230, 201);
-                line = Color.FromArgb(135, 154, 109);
             }
             if (!Enabled)
             {
                 fill = actionActive ? Color.FromArgb(249, 239, 207) : Color.FromArgb(247, 247, 239);
-                line = actionActive ? Color.FromArgb(228, 211, 164) : Color.FromArgb(233, 235, 223);
                 ink = actionActive ? Color.FromArgb(134, 112, 56) : Color.FromArgb(160, 171, 148);
             }
             if (actionActive && ActionIcon == CompanionActionIcon.Home)
-            { fill = Color.FromArgb(226, 237, 207); line = Color.FromArgb(172, 193, 146); }
+            { fill = Color.FromArgb(226, 237, 207); }
 
             RectangleF body = new RectangleF(2 * unit, (down ? 4 : hover ? 1 : 2) * unit, Width - 4 * unit, Height - 6 * unit);
-            if (Enabled && !down)
-                CompanionStyle.Fill(g, Color.FromArgb(231, 234, 219), new RectangleF(body.X, body.Y + 2 * unit, body.Width, body.Height), 10 * unit);
             CompanionStyle.Fill(g, fill, body, 10 * unit);
-            using (GraphicsPath path = CompanionStyle.Rounded(body, 10 * unit))
-            using (Pen pen = new Pen(line, unit)) g.DrawPath(pen, path);
 
             string caption = String.IsNullOrEmpty(actionCaption) ? Text : actionCaption;
             TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
@@ -246,11 +238,6 @@ namespace NaiwaDesktop
             Rectangle textRect = Rectangle.Round(new RectangleF(left + glyph + gap, body.Y, total - glyph - gap + unit, body.Height));
             TextRenderer.DrawText(g, caption, Font, textRect, ink, flags | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-            if (Focused && ShowFocusCues && Enabled)
-            {
-                using (GraphicsPath path = CompanionStyle.Rounded(new RectangleF(.75f * unit, .75f * unit, Width - 1.5f * unit, Height - 1.5f * unit), 12 * unit))
-                using (Pen pen = new Pen(Color.FromArgb(100, 135, 76), 1.5f * unit)) g.DrawPath(pen, path);
-            }
         }
         private void DrawActionIcon(Graphics g, RectangleF bounds, Color color)
         {

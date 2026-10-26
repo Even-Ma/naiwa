@@ -423,7 +423,7 @@ namespace NaiwaDesktop
         private ContextMenuStrip BuildMenu()
         {
             ContextMenuStrip result=new ContextMenuStrip{Font=new Font("Microsoft YaHei UI",10f),ShowImageMargin=false};
-            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.3.2") {Enabled=false});
+            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.3.3") {Enabled=false});
             result.Items.Add("打开陪伴面板 / 专注计时",null,delegate{OpenCompanion();});result.Items.Add(new ToolStripSeparator());
             result.Items.Add("捧腹大笑（双击）",null,delegate{Laugh();});
             stopItem=new ToolStripMenuItem("停止大笑 / 站起来",null,delegate{if(Motion.Resting){Motion.Stand(Now);RenderNow(true);}else StopLaugh();});result.Items.Add(stopItem);
