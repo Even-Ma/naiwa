@@ -1,0 +1,24 @@
+# Generated builds and verification output
+/dist/
+/bin/
+/obj/
+/work/
+/baseline-test/
+/assets/Naiwa-baseline.exe
+/assets/素材.nwp
+/assets/原版笑声.wav
+/assets/naiwa.ico
+/assets/.download-*
+/docs/upstream/*.png
+
+# User and editor state
+.vs/
+.vscode/
+*.user
+*.suo
+*.log
+Thumbs.db
+Desktop.ini
+
+# Runtime data belongs in LocalAppData, not in source control
+settings.ini
