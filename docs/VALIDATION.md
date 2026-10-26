@@ -1,6 +1,6 @@
 # 本地验证记录
 
-日期：2026-10-24；版本：1.3.0；平台：Windows x64。
+日期：2026-10-26；版本：1.3.1；平台：Windows x64。
 
 使用系统 .NET Framework C# 编译器构建成功，无编译警告。执行 `scripts/build.ps1 -SelfTest`：**103 项检查通过，RESULT: PASS**。
 
@@ -19,7 +19,7 @@
 本次构建 EXE 的 SHA-256：
 
 ```text
-52DBE2A64CDFF30F4D379FA11EA61B7A7D02B3B15DF7D418025A450999ACD81D
+91542E65A0AAFC3B2B23935741AFF73EA49B2B055567F87CFD24A87DAEB69FDD
 ```
 
 后续重新编译时 EXE 校验值可能因编译时间等发生变化。GitHub Actions 的远端结果应以仓库构建页显示为准。本记录不表示所有 Windows 设备、DPI 或多显示器组合都已经实机验证。

@@ -321,7 +321,7 @@ namespace NaiwaDesktop
             SuspendLayout();
             pet = petWindow;
             controller = new CompanionController(pet);
-            Text = "奶蛙陪伴所"; Icon = pet.Icon;
+            Text = "奶蛙桌宠"; Icon = pet.Icon;
             BackColor = CompanionStyle.Cream; ForeColor = CompanionStyle.Green;
             Font = CompanionStyle.Font(9f, FontStyle.Regular);
             AutoScaleDimensions = new SizeF(96f, 96f);
@@ -333,7 +333,7 @@ namespace NaiwaDesktop
             DoubleBuffered = true;
 
             AddLabel(this, "N A I W A  /  C O M P A N I O N", 29, 20, 385, 20, 8f, CompanionStyle.Muted, FontStyle.Regular);
-            AddLabel(this, "奶蛙陪伴所", 26, 46, 390, 43, 23f, CompanionStyle.Green, FontStyle.Bold);
+            AddLabel(this, "奶蛙桌宠", 26, 46, 390, 43, 23f, CompanionStyle.Green, FontStyle.Bold);
             Label motto = AddLabel(this, "大笑也是一种充电", 548, 43, 160, 31, 9f, CompanionStyle.Green, FontStyle.Regular);
             motto.TextAlign = ContentAlignment.MiddleCenter; motto.BackColor = CompanionStyle.Yellow;
 
