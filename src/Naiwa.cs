@@ -127,13 +127,14 @@ namespace NaiwaDesktop
         }
         private static byte[] Read(ZipArchive zip,string name)
         { ZipArchiveEntry entry=zip.GetEntry(name);if(entry==null)throw new InvalidDataException("缺少动作素材："+name);using(Stream s=entry.Open())using(MemoryStream m=new MemoryStream()){s.CopyTo(m);return m.ToArray();} }
-        private Bitmap Decode(byte[] data)
+        private Bitmap Decode(byte[] data,int laughIndex=-1)
         {
             using(MemoryStream stream=new MemoryStream(data)) using(Image image=Image.FromStream(stream))
             {
                 if(image.Width!=Width||image.Height!=Height)throw new InvalidDataException("动作尺寸不一致");
                 Bitmap b=new Bitmap(Width,Height,PixelFormat.Format32bppPArgb);
-                using(Graphics g=Graphics.FromImage(b)){g.CompositingMode=CompositingMode.SourceCopy;g.DrawImageUnscaled(image,0,0);}return b;
+                using(Graphics g=Graphics.FromImage(b)){g.CompositingMode=CompositingMode.SourceCopy;g.DrawImageUnscaled(image,0,0);}
+                FootMatte.Apply(b,laughIndex);return b;
             }
         }
         internal Bitmap Eye(double value){return eyes[Math.Max(0,Math.Min(EyeCount-1,(int)Math.Round(value*(EyeCount-1))))];}
@@ -142,7 +143,7 @@ namespace NaiwaDesktop
         {
             index=Math.Max(0,Math.Min(Count-1,index));Bitmap b;
             if(cache.TryGetValue(index,out b))return b;
-            b=Decode(encoded[index]);cache.Add(index,b);order.Enqueue(index);
+            b=Decode(encoded[index],index);cache.Add(index,b);order.Enqueue(index);
             while(order.Count>12){int old=order.Dequeue();cache[old].Dispose();cache.Remove(old);}return b;
         }
         public void Dispose(){if(Memes!=null)Memes.Dispose();if(eyes!=null)foreach(Bitmap b in eyes)if(b!=null)b.Dispose();if(blinks!=null)foreach(Bitmap[] bank in blinks)foreach(Bitmap b in bank)if(b!=null)b.Dispose();foreach(Bitmap b in cache.Values)b.Dispose();cache.Clear();}
@@ -431,7 +432,7 @@ namespace NaiwaDesktop
         private ContextMenuStrip BuildMenu()
         {
             ContextMenuStrip result=new ContextMenuStrip{Font=new Font("Microsoft YaHei UI",10f),ShowImageMargin=false};
-            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.4.0") {Enabled=false});
+            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.4.1") {Enabled=false});
             result.Items.Add("打开陪伴面板 / 专注计时",null,delegate{OpenCompanion();});result.Items.Add(new ToolStripSeparator());
             result.Items.Add("捧腹大笑（双击）",null,delegate{Laugh();});
             stopItem=new ToolStripMenuItem("停止大笑 / 站起来",null,delegate{if(Motion.Resting){Motion.Stand(Now);RenderNow(true);}else StopLaugh();});result.Items.Add(stopItem);
@@ -729,6 +730,7 @@ namespace NaiwaDesktop
                         Check(opened.WindowState==FormWindowState.Normal&&form.Location==beforeTray,"tray double click restores a minimized panel without moving the pet",log);
                         form.Close();Check(form.IsDisposed&&opened.IsDisposed,"window and tray companion close cleanly",log);
                     }
+                    FootMatteTests.Run(a,folder,log);
                     MemeActionTests.Run(a,folder,log);
                     CompanionTests.Run(a,folder,log);
                     using(Icon icon=Renderer.CreateIcon(a.Eye(0)))using(FileStream f=File.Create(Path.Combine(folder,"naiwa.ico")))icon.Save(f);

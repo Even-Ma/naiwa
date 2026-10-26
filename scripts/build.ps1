@@ -57,7 +57,7 @@ $compilerArguments = @(
     '/reference:System.Web.Extensions.dll'
 ) + $sources
 
-Write-Output '正在构建奶蛙桌宠 1.4.0（Windows x64）……'
+Write-Output '正在构建奶蛙桌宠 1.4.1（Windows x64）……'
 & $compiler @compilerArguments
 if ($LASTEXITCODE -ne 0) { throw ('编译失败，退出码：' + $LASTEXITCODE) }
 
@@ -80,7 +80,7 @@ foreach ($sourceFile in $actionSourceFiles) {
 
 $usage = @'
 奶蛙桌宠
-版本：1.4.0
+版本：1.4.1
 
 开始使用
 1. 先把压缩包完整解压到任意文件夹。
