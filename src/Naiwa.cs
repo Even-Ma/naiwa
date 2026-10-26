@@ -399,7 +399,8 @@ namespace NaiwaDesktop
             Icon=petIcon;
             if(File.Exists(assets.AudioPath)){sound=new SoundPlayer(assets.AudioPath);sound.Load();}
             menu=BuildMenu();
-            if(!testing){tray=new NotifyIcon{Icon=petIcon,Text="奶蛙 · 戳肚子 / 双击笑 / 拖动",ContextMenuStrip=menu,Visible=true};tray.DoubleClick+=delegate{ReturnHome();};}
+            tray=new NotifyIcon{Icon=petIcon,Text="奶蛙桌宠 · 双击打开面板",ContextMenuStrip=menu,Visible=!testing};
+            tray.DoubleClick+=delegate{OpenCompanion();};
             timer.Interval=16;timer.Tick+=delegate{Tick();};
             Shown+=delegate{ready=true;RenderNow(true);if(!testing){CheckFullscreen(true);timer.Start();if(!settings.Welcomed){settings.Welcomed=true;Save();BeginInvoke((MethodInvoker)delegate{OpenCompanion();});}}};
         }
@@ -422,7 +423,7 @@ namespace NaiwaDesktop
         private ContextMenuStrip BuildMenu()
         {
             ContextMenuStrip result=new ContextMenuStrip{Font=new Font("Microsoft YaHei UI",10f),ShowImageMargin=false};
-            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.3.1") {Enabled=false});
+            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.3.2") {Enabled=false});
             result.Items.Add("打开陪伴面板 / 专注计时",null,delegate{OpenCompanion();});result.Items.Add(new ToolStripSeparator());
             result.Items.Add("捧腹大笑（双击）",null,delegate{Laugh();});
             stopItem=new ToolStripMenuItem("停止大笑 / 站起来",null,delegate{if(Motion.Resting){Motion.Stand(Now);RenderNow(true);}else StopLaugh();});result.Items.Add(stopItem);
@@ -467,7 +468,7 @@ namespace NaiwaDesktop
         }
         internal void NotifyFocusComplete()
         {
-            if(tray!=null){tray.BalloonTipTitle="奶蛙：这一段专注完成啦";tray.BalloonTipText="站起来伸伸腰，喝口水。奶蛙陪你休息一下。";tray.ShowBalloonTip(6000);}
+            if(!testing&&tray!=null){tray.BalloonTipTitle="奶蛙：这一段专注完成啦";tray.BalloonTipText="站起来伸伸腰，喝口水。奶蛙陪你休息一下。";tray.ShowBalloonTip(6000);}
         }
         internal bool Laugh()
         {
@@ -686,7 +687,23 @@ namespace NaiwaDesktop
                         int stable=Native.GetGuiResources(Process.GetCurrentProcess().Handle,0);
                         log.Add("METRIC: repeat-playback GDI delta "+(stable-after));
                         Check(stable-after<10,"repeat playback does not leak GDI handles",log);Check(a.CacheCount<=12,"decoded frame cache stays bounded",log);
-                        form.Motion.Stop();form.RenderNow(true);form.Close();Check(form.IsDisposed,"window closes cleanly",log);
+                        form.Motion.Stop();form.RenderNow(true);
+                        // Raise the real NotifyIcon event; no shell tray entry is registered in test mode.
+                        System.Reflection.BindingFlags members=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+                        NotifyIcon testTray=(NotifyIcon)typeof(PetWindow).GetField("tray",members).GetValue(form);
+                        System.Reflection.MethodInfo trayDoubleClick=typeof(NotifyIcon).GetMethod("OnDoubleClick",members);
+                        form.Location=new Point(Screen.PrimaryScreen.WorkingArea.Left+30,Screen.PrimaryScreen.WorkingArea.Top+40);
+                        Point beforeTray=form.Location;
+                        trayDoubleClick.Invoke(testTray,new object[]{EventArgs.Empty});Application.DoEvents();
+                        CompanionWindow opened=(CompanionWindow)typeof(PetWindow).GetField("companion",members).GetValue(form);
+                        Check(opened!=null&&opened.Visible&&form.Location==beforeTray,"tray double click opens panel without moving the pet",log);
+                        opened.Close();Application.DoEvents();
+                        trayDoubleClick.Invoke(testTray,new object[]{EventArgs.Empty});Application.DoEvents();
+                        Check(opened.Visible&&Object.ReferenceEquals(opened,typeof(PetWindow).GetField("companion",members).GetValue(form))&&form.Location==beforeTray,"tray double click reopens the same hidden panel and preserves position",log);
+                        opened.WindowState=FormWindowState.Minimized;
+                        trayDoubleClick.Invoke(testTray,new object[]{EventArgs.Empty});Application.DoEvents();
+                        Check(opened.WindowState==FormWindowState.Normal&&form.Location==beforeTray,"tray double click restores a minimized panel without moving the pet",log);
+                        form.Close();Check(form.IsDisposed&&opened.IsDisposed,"window and tray companion close cleanly",log);
                     }
                     CompanionTests.Run(a,folder,log);
                     using(Icon icon=Renderer.CreateIcon(a.Eye(0)))using(FileStream f=File.Create(Path.Combine(folder,"naiwa.ico")))icon.Save(f);

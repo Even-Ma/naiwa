@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace NaiwaDesktop
@@ -142,11 +143,16 @@ namespace NaiwaDesktop
         }
     }
 
+    internal enum CompanionActionIcon { None, Laugh, Stand, Home }
+
     internal sealed class CompanionButton : Button
     {
         internal bool Selected;
         internal bool Accent;
-        private bool over, pressed;
+        internal CompanionActionIcon ActionIcon;
+        private bool actionActive;
+        private string actionCaption;
+        private bool over, pressed, keyPressed;
         internal CompanionButton(string text)
         {
             Text = text; Cursor = Cursors.Hand; FlatStyle = FlatStyle.Flat;
@@ -155,14 +161,30 @@ namespace NaiwaDesktop
             ForeColor = CompanionStyle.Green; BackColor = CompanionStyle.Card;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
+        internal void SetActionState(bool active, string caption)
+        {
+            if (actionActive == active && actionCaption == caption) return;
+            actionActive = active; actionCaption = caption; Invalidate();
+        }
         protected override void OnMouseEnter(EventArgs e) { over = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { over = pressed = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseDown(MouseEventArgs e) { pressed = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseLeave(EventArgs e)
+        { over = false; if (ActionIcon == CompanionActionIcon.None) pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        { if (ActionIcon == CompanionActionIcon.None || e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
         protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { if (ActionIcon != CompanionActionIcon.None) pressed = keyPressed = false; Invalidate(); base.OnLostFocus(e); }
+        protected override void OnEnabledChanged(EventArgs e)
+        { if (!Enabled && ActionIcon != CompanionActionIcon.None) pressed = keyPressed = false; Invalidate(); base.OnEnabledChanged(e); }
+        protected override void OnMouseCaptureChanged(EventArgs e)
+        { if (!Capture && ActionIcon != CompanionActionIcon.None) { pressed = false; Invalidate(); } base.OnMouseCaptureChanged(e); }
+        protected override void OnKeyDown(KeyEventArgs e)
+        { if (ActionIcon != CompanionActionIcon.None && e.KeyCode == Keys.Space) { keyPressed = true; Invalidate(); } base.OnKeyDown(e); }
+        protected override void OnKeyUp(KeyEventArgs e)
+        { if (ActionIcon != CompanionActionIcon.None && e.KeyCode == Keys.Space) { keyPressed = false; Invalidate(); } base.OnKeyUp(e); }
         protected override void OnPaint(PaintEventArgs e)
         {
+            if (ActionIcon != CompanionActionIcon.None) { PaintAction(e.Graphics); return; }
             Graphics g = e.Graphics;
             g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
             Color fill = Selected ? CompanionStyle.Green : Accent ? CompanionStyle.Yellow : CompanionStyle.Mint;
@@ -173,6 +195,92 @@ namespace NaiwaDesktop
             TextRenderer.DrawText(g, Text, Font, new Rectangle(2, 1, Width - 4, Height - 2), !Enabled ? CompanionStyle.Muted : Selected ? CompanionStyle.Card : CompanionStyle.Green, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             if (Focused && ShowFocusCues)
                 using (Pen pen = new Pen(CompanionStyle.Muted)) { pen.DashStyle = DashStyle.Dot; using (GraphicsPath p = CompanionStyle.Rounded(new RectangleF(3, 3, Width - 7, Height - 7), 7)) g.DrawPath(pen, p); }
+        }
+
+        // Action buttons share a quiet surface, a thin outline and hand drawn
+        // glyphs. Their state uses the panel's existing refresh cycle, without
+        // a per-button animation timer or a native focus/default-button frame.
+        private void PaintAction(Graphics g)
+        {
+            g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
+            float unit = g.DpiX / 96f;
+            bool down = Enabled && (pressed && over || keyPressed);
+            bool hover = Enabled && over;
+            Color fill = Accent ? Color.FromArgb(250, 240, 207) : Color.FromArgb(243, 246, 235);
+            Color line = Accent ? Color.FromArgb(225, 210, 163) : Color.FromArgb(218, 227, 204);
+            Color ink = CompanionStyle.Green;
+            if (hover)
+            {
+                fill = Accent ? Color.FromArgb(246, 226, 168) : Color.FromArgb(232, 239, 218);
+                line = Accent ? Color.FromArgb(195, 169, 99) : Color.FromArgb(157, 177, 135);
+            }
+            if (down)
+            {
+                fill = Accent ? Color.FromArgb(239, 215, 149) : Color.FromArgb(220, 230, 201);
+                line = Color.FromArgb(135, 154, 109);
+            }
+            if (!Enabled)
+            {
+                fill = actionActive ? Color.FromArgb(249, 239, 207) : Color.FromArgb(247, 247, 239);
+                line = actionActive ? Color.FromArgb(228, 211, 164) : Color.FromArgb(233, 235, 223);
+                ink = actionActive ? Color.FromArgb(134, 112, 56) : Color.FromArgb(160, 171, 148);
+            }
+            if (actionActive && ActionIcon == CompanionActionIcon.Home)
+            { fill = Color.FromArgb(226, 237, 207); line = Color.FromArgb(172, 193, 146); }
+
+            RectangleF body = new RectangleF(2 * unit, (down ? 4 : hover ? 1 : 2) * unit, Width - 4 * unit, Height - 6 * unit);
+            if (Enabled && !down)
+                CompanionStyle.Fill(g, Color.FromArgb(231, 234, 219), new RectangleF(body.X, body.Y + 2 * unit, body.Width, body.Height), 10 * unit);
+            CompanionStyle.Fill(g, fill, body, 10 * unit);
+            using (GraphicsPath path = CompanionStyle.Rounded(body, 10 * unit))
+            using (Pen pen = new Pen(line, unit)) g.DrawPath(pen, path);
+
+            string caption = String.IsNullOrEmpty(actionCaption) ? Text : actionCaption;
+            TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            int textWidth = TextRenderer.MeasureText(g, caption, Font, new Size(1000, Height), flags).Width;
+            float glyph = 16 * unit, gap = 7 * unit;
+            float total = Math.Min(body.Width - 16 * unit, glyph + gap + textWidth);
+            float left = body.X + (body.Width - total) / 2;
+            float centerY = body.Y + body.Height / 2;
+            DrawActionIcon(g, new RectangleF(left, centerY - glyph / 2, glyph, glyph), ink);
+            Rectangle textRect = Rectangle.Round(new RectangleF(left + glyph + gap, body.Y, total - glyph - gap + unit, body.Height));
+            TextRenderer.DrawText(g, caption, Font, textRect, ink, flags | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            if (Focused && ShowFocusCues && Enabled)
+            {
+                using (GraphicsPath path = CompanionStyle.Rounded(new RectangleF(.75f * unit, .75f * unit, Width - 1.5f * unit, Height - 1.5f * unit), 12 * unit))
+                using (Pen pen = new Pen(Color.FromArgb(100, 135, 76), 1.5f * unit)) g.DrawPath(pen, path);
+            }
+        }
+        private void DrawActionIcon(Graphics g, RectangleF bounds, Color color)
+        {
+            GraphicsState state = g.Save();
+            g.TranslateTransform(bounds.X, bounds.Y); g.ScaleTransform(bounds.Width / 16, bounds.Height / 16);
+            using (Pen pen = new Pen(color, 1.35f))
+            {
+                pen.StartCap = pen.EndCap = LineCap.Round; pen.LineJoin = LineJoin.Round;
+                if (ActionIcon == CompanionActionIcon.Laugh)
+                {
+                    g.DrawEllipse(pen, 1.6f, 1.6f, 12.8f, 12.8f);
+                    g.DrawArc(pen, 4, 5, 2.2f, 2, 200, 140); g.DrawArc(pen, 9.8f, 5, 2.2f, 2, 200, 140);
+                    g.DrawArc(pen, 4.8f, 6.3f, 6.4f, 5.5f, 8, 164);
+                }
+                else if (ActionIcon == CompanionActionIcon.Stand)
+                {
+                    g.DrawLine(pen, 8, 2.5f, 8, 10.6f);
+                    g.DrawLines(pen, new PointF[] { new PointF(4.6f, 5.9f), new PointF(8, 2.5f), new PointF(11.4f, 5.9f) });
+                    g.DrawLines(pen, new PointF[] { new PointF(3, 11.4f), new PointF(3, 13.5f), new PointF(13, 13.5f), new PointF(13, 11.4f) });
+                }
+                else if (actionActive)
+                    g.DrawLines(pen, new PointF[] { new PointF(3, 8.2f), new PointF(6.7f, 11.5f), new PointF(13, 4.7f) });
+                else
+                {
+                    g.DrawLines(pen, new PointF[] { new PointF(13.8f, 3.2f), new PointF(13.8f, 13.8f), new PointF(3.2f, 13.8f) });
+                    g.DrawLine(pen, 2.8f, 2.8f, 10.8f, 10.8f);
+                    g.DrawLines(pen, new PointF[] { new PointF(6.5f, 10.8f), new PointF(10.8f, 10.8f), new PointF(10.8f, 6.5f) });
+                }
+            }
+            g.Restore(state);
         }
     }
 
@@ -309,10 +417,11 @@ namespace NaiwaDesktop
         private readonly CompanionSwitch onTop, sound, autoHide;
         private readonly CompanionScale scale;
         private readonly Label scaleValue, status, timerLabel, timerHint;
-        private readonly CompanionButton restMode, focusMode, start, reset;
+        private readonly CompanionButton restMode, focusMode, start, reset, laugh, stand, home;
         private readonly CompanionProgress progress;
         private bool syncing;
         private string lastStatus;
+        private double homeFeedbackUntil;
         internal FocusClock Clock { get { return controller.Clock; } }
         internal bool TimersStopped { get { return !previewTimer.Enabled && !controller.TimerEnabled; } }
 
@@ -344,12 +453,23 @@ namespace NaiwaDesktop
             AddLabel(hero, "你忙你的，我陪着。", 276, 52, 375, 40, 19.5f, CompanionStyle.Green, FontStyle.Bold);
             status = AddLabel(hero, "● 正在发呆，偶尔眨眨眼", 280, 102, 365, 24, 9.5f, CompanionStyle.Green, FontStyle.Regular);
             AddLabel(hero, "戳戳软肚皮，收获一点好心情。\n双击奶蛙，让快乐晃起来。", 280, 134, 365, 43, 9f, CompanionStyle.Muted, FontStyle.Regular);
-            CompanionButton laugh = Button(hero, "让它大笑", 280, 192, 108, 36, true);
-            CompanionButton stand = Button(hero, "站起来", 398, 192, 102, 36, false);
-            CompanionButton home = Button(hero, "回到右下角", 510, 192, 146, 36, false);
+            laugh = Button(hero, "让它大笑", 278, 187, 122, 44, true);
+            stand = Button(hero, "站起来", 406, 187, 122, 44, false);
+            home = Button(hero, "回到右下角", 534, 187, 124, 44, false);
+            laugh.ActionIcon = CompanionActionIcon.Laugh;
+            stand.ActionIcon = CompanionActionIcon.Stand;
+            home.ActionIcon = CompanionActionIcon.Home;
+            laugh.AccessibleName = "让它大笑"; stand.AccessibleName = "站起来"; home.AccessibleName = "回到右下角";
+            laugh.AccessibleDescription = "播放奶蛙的原版大笑动作";
+            stand.AccessibleDescription = "停止大笑或从躺平姿势站起来";
+            home.AccessibleDescription = "让奶蛙回到鼠标所在屏幕的右下角";
             laugh.Click += delegate { pet.Laugh(); RefreshPet(); };
             stand.Click += delegate { pet.StopLaugh(); RefreshPet(); };
-            home.Click += delegate { pet.ReturnHome(); RefreshPet(); };
+            home.Click += delegate
+            {
+                pet.ReturnHome(); homeFeedbackUntil = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency + 1.4;
+                RefreshPet();
+            };
 
             CompanionCard preferences = Card(28, 378, 326, 222);
             AddLabel(preferences, "陪伴偏好", 20, 16, 150, 25, 12f, CompanionStyle.Green, FontStyle.Bold);
@@ -413,6 +533,12 @@ namespace NaiwaDesktop
         }
         private void RefreshPet()
         {
+            bool playing = pet.Motion.Playing;
+            laugh.SetActionState(playing, playing ? "大笑中" : null);
+            laugh.Enabled = !pet.HiddenForFullscreen && !playing;
+            stand.Enabled = !pet.HiddenForFullscreen && (playing || pet.Motion.Resting);
+            bool returned = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency < homeFeedbackUntil;
+            home.SetActionState(returned, returned ? "已回到角落" : null);
             string text = pet.HiddenForFullscreen ? "● 全屏中，奶蛙先安静躲一会儿" : pet.Motion.Playing ? "● 哈哈哈，快乐正在发生" : pet.Motion.Resting ? "● 笑累了，躺平充个电" : pet.Motion.Holding ? "● 被你捧起来啦" : pet.Motion.Poking ? "● 肚皮软软，烦恼散散" : "● 正在发呆，偶尔眨眨眼";
             if (lastStatus != text) { status.Text = text; lastStatus = text; }
             preview.Invalidate();
@@ -465,6 +591,17 @@ namespace NaiwaDesktop
             }
             return null;
         }
+        private static void Capture(Form panel, string folder, string name)
+        {
+            using (Bitmap bitmap = new Bitmap(panel.Width, panel.Height))
+            { panel.DrawToBitmap(bitmap, new Rectangle(Point.Empty, panel.Size)); bitmap.Save(Path.Combine(folder, name), ImageFormat.Png); }
+        }
+        private static void VisualEvent(Control control, string name, EventArgs args)
+        {
+            // Exercise the same protected event path as WinForms, keeping
+            // screenshots deterministic without moving the user's pointer.
+            typeof(Control).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(control, new object[] { args });
+        }
         internal static void Run(Assets assets, string folder, List<string> log)
         {
             FocusClock clock = new FocusClock();
@@ -490,16 +627,40 @@ namespace NaiwaDesktop
             {
                 pet.Show(); panel.Show(); Application.DoEvents();
                 Check(panel.Visible && panel.IsHandleCreated, "companion panel opens alongside the pet", log);
-                using (Bitmap bitmap = new Bitmap(panel.Width, panel.Height))
-                { panel.DrawToBitmap(bitmap, new Rectangle(Point.Empty, panel.Size)); bitmap.Save(Path.Combine(folder, "companion-panel.png"), ImageFormat.Png); }
 
                 CompanionButton laugh = Find<CompanionButton>(panel, "让它大笑");
                 CompanionButton stand = Find<CompanionButton>(panel, "站起来");
-                Check(laugh != null && stand != null, "companion action buttons are accessible controls", log);
+                CompanionButton home = Find<CompanionButton>(panel, "回到右下角");
+                Check(laugh != null && stand != null && home != null, "companion action buttons are accessible controls", log);
+                Check(laugh.Enabled && !stand.Enabled && home.Enabled, "companion idle actions enable laugh and home while standing is unnecessary", log);
+                VisualEvent(laugh, "OnMouseLeave", EventArgs.Empty);
+                VisualEvent(home, "OnMouseLeave", EventArgs.Empty);
+                Capture(panel, folder, "companion-panel.png");
+                Capture(panel, folder, "companion-actions-default.png");
+                VisualEvent(laugh, "OnMouseEnter", EventArgs.Empty);
+                Capture(panel, folder, "companion-actions-hover.png");
+                VisualEvent(laugh, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, laugh.Width / 2, laugh.Height / 2, 0));
+                Capture(panel, folder, "companion-actions-pressed.png");
+                // Cancelling capture must not execute the action after the
+                // pressed screenshot, just as dragging out of a button does.
+                laugh.Capture = false; laugh.Enabled = false; laugh.Enabled = true;
+                VisualEvent(laugh, "OnMouseLeave", EventArgs.Empty);
+
                 laugh.PerformClick();
                 Check(pet.Motion.Playing, "companion laugh button starts the original action", log);
+                int plays = pet.Motion.PlayCount;
+                laugh.PerformClick();
+                Check(!laugh.Enabled && stand.Enabled && home.Enabled && pet.Motion.PlayCount == plays, "companion laughter disables repeated playback and offers standing", log);
                 stand.PerformClick();
-                Check(!pet.Motion.Playing && !pet.Motion.Resting, "companion stand button restores idle", log);
+                Check(!pet.Motion.Playing && !pet.Motion.Resting && laugh.Enabled && !stand.Enabled, "companion stand button restores idle and immediately updates available actions", log);
+                pet.Motion.Laugh(0); pet.Motion.Update(assets.Duration + .1, false, assets.Duration, assets.BlinkCount / assets.BlinkFps);
+                panel.Hide(); panel.Show(); Application.DoEvents();
+                Check(pet.Motion.Resting && stand.Enabled && laugh.Enabled, "companion resting pose offers standing or laughing again", log);
+                stand.PerformClick();
+                Check(!pet.Motion.Resting && !stand.Enabled, "companion standing from a resting pose removes the redundant action", log);
+                pet.ApplyFullscreen(true); panel.Hide(); panel.Show(); Application.DoEvents();
+                Check(!laugh.Enabled && !stand.Enabled && home.Enabled, "companion fullscreen hiding disables unavailable actions while preserving home", log);
+                pet.ApplyFullscreen(false); panel.Hide(); panel.Show(); Application.DoEvents();
                 CompanionSwitch top = Find<CompanionSwitch>(panel, "置顶显示");
                 bool oldTop = pet.TopMost; top.Checked = !oldTop;
                 Check(pet.TopMost != oldTop, "companion preference toggle updates the pet", log);
