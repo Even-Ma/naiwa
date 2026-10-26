@@ -21,12 +21,27 @@ if (-not (Test-Path -LiteralPath $compiler)) {
     throw '未找到 Windows 的 C# 编译器。请在 Windows 10 / 11 上构建，并确认已安装 .NET Framework 4.x。'
 }
 
-$requiredFiles = @('assets\素材.nwp', 'assets\原版笑声.wav', 'assets\naiwa.ico', 'src\Pet.manifest', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
+$requiredFiles = @(
+    'assets\素材.nwp', 'assets\原版笑声.wav', 'assets\naiwa.ico',
+    'assets\actions\manifest.json', 'assets\actions\sheets\shufflestep.png',
+    'assets\actions\sheets\headbob.png', 'assets\actions\sheets\holdlaugh.png',
+    'src\Pet.manifest', 'LICENSE', 'THIRD_PARTY_NOTICES.md'
+)
 foreach ($relativePath in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $relativePath) -PathType Leaf)) {
         throw ('缺少构建文件：' + $relativePath + '。请保留完整项目文件。')
     }
 }
+$actionSourceDirectory = Join-Path $repoRoot 'assets\actions'
+$actionManifest = Get-Content -LiteralPath (Join-Path $actionSourceDirectory 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($actionManifest.version -ne 1) { throw '玩梗动作 manifest.json 版本无效。' }
+foreach ($actionId in @('shufflestep', 'headbob', 'holdlaugh')) {
+    $matchesForId = @($actionManifest.actions | Where-Object { $_.id -ceq $actionId })
+    if ($matchesForId.Count -ne 1 -or $matchesForId[0].sheet -cne ('sheets/' + $actionId + '.png')) {
+        throw ('玩梗动作清单缺少或重复定义：' + $actionId)
+    }
+}
+$actionSourceFiles = @(Get-ChildItem -LiteralPath $actionSourceDirectory -File -Recurse | Sort-Object FullName)
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'src') -Filter '*.cs' -File | Sort-Object Name | ForEach-Object { $_.FullName })
 if ($sources.Count -eq 0) { throw 'src 文件夹中没有 C# 源代码。' }
 
@@ -42,7 +57,7 @@ $compilerArguments = @(
     '/reference:System.Web.Extensions.dll'
 ) + $sources
 
-Write-Output '正在构建奶蛙桌宠 1.3.3（Windows x64）……'
+Write-Output '正在构建奶蛙桌宠 1.4.0（Windows x64）……'
 & $compiler @compilerArguments
 if ($LASTEXITCODE -ne 0) { throw ('编译失败，退出码：' + $LASTEXITCODE) }
 
@@ -50,15 +65,28 @@ Copy-Item -LiteralPath (Join-Path $repoRoot 'assets\素材.nwp') -Destination (J
 Copy-Item -LiteralPath (Join-Path $repoRoot 'assets\原版笑声.wav') -Destination (Join-Path $packageDirectory '原版笑声.wav') -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $packageDirectory 'LICENSE') -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $packageDirectory 'THIRD_PARTY_NOTICES.md') -Force
+$packagedActionFiles = @()
+foreach ($sourceFile in $actionSourceFiles) {
+    $relativeActionPath = $sourceFile.FullName.Substring($actionSourceDirectory.Length + 1)
+    $relativePackagePath = Join-Path 'actions' $relativeActionPath
+    $destination = Join-Path $packageDirectory $relativePackagePath
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
+    Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination -Force
+    if ((Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
+        throw ('玩梗动作复制校验失败：' + $relativeActionPath)
+    }
+    $packagedActionFiles += $relativePackagePath
+}
 
 $usage = @'
 奶蛙桌宠
-版本：1.3.3
+版本：1.4.0
 
 开始使用
 1. 先把压缩包完整解压到任意文件夹。
 2. 双击「奶蛙桌宠.exe」。奶蛙会出现在鼠标所在屏幕的右下角。
 3. 请让程序、「素材.nwp」和「原版笑声.wav」一直放在同一文件夹。
+   也请完整保留随程序附带的 actions 文件夹。
 
 陪伴与互动
 · 鼠标移到奶蛙身上，它会转眼看你，待机时会自然眨眼。
@@ -70,6 +98,14 @@ $usage = @'
   面板关闭时计时继续，到期会通过托盘提醒。切回「摸鱼」会暂停计时。
 · 双击任务栏托盘中的奶蛙图标，可显示或恢复陪伴面板，奶蛙位置不变。
 · 全屏隐藏默认开启；奶蛙所在屏幕的前台应用全屏时，它会暂时隐藏。
+
+玩梗动作
+· 面板中三个无描边动作按钮和右键菜单「玩梗动作」可选择「闪身步」、
+  「摇头晃脑」和「憋笑」。动作播放完会自动回到待机。
+· 可以重播或切换动作；「站起来」会停止当前动作。
+  拖动、播放原版大笑或进入全屏隐藏时，也会打断当前玩梗动作。
+· 新动作由 ImageGen 以原角色为参考制作独立姿态，借鉴闪身步、
+  摇头晃脑等网络趣味动作和憋笑通用表情。资源随程序附带，运行离线。
 
 找不到奶蛙
 双击托盘中的奶蛙图标显示或恢复陪伴面板，再选「回到右下角」；也可
@@ -122,15 +158,28 @@ if ($SelfTest) {
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $packageFiles = @('奶蛙桌宠.exe', '素材.nwp', '原版笑声.wav', '使用说明.txt', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
+$packageFiles += $packagedActionFiles
 $archiveStream = [IO.File]::Open($archivePath, [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
 try {
     $archive = New-Object IO.Compression.ZipArchive($archiveStream, [IO.Compression.ZipArchiveMode]::Create, $true, [Text.Encoding]::UTF8)
     try {
         foreach ($fileName in $packageFiles) {
-            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $packageDirectory $fileName), ('Naiwa/' + $fileName), [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $packageDirectory $fileName), ('Naiwa/' + $fileName.Replace('\', '/')), [IO.Compression.CompressionLevel]::Optimal) | Out-Null
         }
     } finally { $archive.Dispose() }
 } finally { $archiveStream.Dispose() }
+
+$verificationArchive = [IO.Compression.ZipFile]::OpenRead($archivePath)
+try {
+    if ($verificationArchive.Entries.Count -ne $packageFiles.Count) { throw '便携压缩包文件数量校验失败。' }
+    foreach ($fileName in $packageFiles) {
+        $entryName = 'Naiwa/' + $fileName.Replace('\', '/')
+        $entry = $verificationArchive.GetEntry($entryName)
+        if ($null -eq $entry -or $entry.Length -ne (Get-Item -LiteralPath (Join-Path $packageDirectory $fileName)).Length) {
+            throw ('便携压缩包缺少或未完整写入：' + $entryName)
+        }
+    }
+} finally { $verificationArchive.Dispose() }
 
 Write-Output ('程序：' + $executablePath)
 Write-Output ('便携压缩包：' + $archivePath)

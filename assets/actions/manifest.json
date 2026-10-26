@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "actions": [
+    { "id": "holdlaugh", "name": "憋笑绷不住", "sheet": "sheets/holdlaugh.png", "columns": 4, "rows": 2, "frames": 8, "fps": 6.5, "cycles": 2, "sourceDescription": "以现有奶蛙形象为参考，用内置 imagegen 新制的透明关键帧；鼓腮捂嘴憋笑的通用表情改编，非原版视频帧。" },
+    { "id": "headbob", "name": "摇头晃脑", "sheet": "sheets/headbob.png", "columns": 4, "rows": 2, "frames": 8, "fps": 8, "cycles": 4, "sourceDescription": "以现有奶蛙形象为参考，用内置 imagegen 新制的透明关键帧；参考摇头晃脑舞的趣味动作，未复制源视频。" },
+    { "id": "shufflestep", "name": "闪身步·趣味改编", "sheet": "sheets/shufflestep.png", "columns": 4, "rows": 2, "frames": 8, "fps": 8, "cycles": 4, "sourceDescription": "以现有奶蛙形象为参考，用内置 imagegen 新制的左右错步透明关键帧；闪身步主题的趣味改编，不是原舞步的精确复刻或原视频抠帧。" }
+  ]
+}

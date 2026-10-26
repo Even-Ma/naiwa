@@ -149,10 +149,12 @@ namespace NaiwaDesktop
     {
         internal bool Selected;
         internal bool Accent;
+        internal bool IsMemeChip;
         internal CompanionActionIcon ActionIcon;
         private bool actionActive;
         private string actionCaption;
         private bool over, pressed, keyPressed;
+        private bool CustomInteraction { get { return IsMemeChip || ActionIcon != CompanionActionIcon.None; } }
         internal CompanionButton(string text)
         {
             Text = text; Cursor = Cursors.Hand; FlatStyle = FlatStyle.Flat;
@@ -168,22 +170,23 @@ namespace NaiwaDesktop
         }
         protected override void OnMouseEnter(EventArgs e) { over = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e)
-        { over = false; if (ActionIcon == CompanionActionIcon.None) pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        { over = false; if (!CustomInteraction) pressed = false; Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e)
-        { if (ActionIcon == CompanionActionIcon.None || e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
+        { if (!CustomInteraction || e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
         protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-        protected override void OnLostFocus(EventArgs e) { if (ActionIcon != CompanionActionIcon.None) pressed = keyPressed = false; Invalidate(); base.OnLostFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { if (CustomInteraction) pressed = keyPressed = false; Invalidate(); base.OnLostFocus(e); }
         protected override void OnEnabledChanged(EventArgs e)
-        { if (!Enabled && ActionIcon != CompanionActionIcon.None) pressed = keyPressed = false; Invalidate(); base.OnEnabledChanged(e); }
+        { if (!Enabled && CustomInteraction) pressed = keyPressed = false; Invalidate(); base.OnEnabledChanged(e); }
         protected override void OnMouseCaptureChanged(EventArgs e)
-        { if (!Capture && ActionIcon != CompanionActionIcon.None) { pressed = false; Invalidate(); } base.OnMouseCaptureChanged(e); }
+        { if (!Capture && CustomInteraction) { pressed = false; Invalidate(); } base.OnMouseCaptureChanged(e); }
         protected override void OnKeyDown(KeyEventArgs e)
-        { if (ActionIcon != CompanionActionIcon.None && e.KeyCode == Keys.Space) { keyPressed = true; Invalidate(); } base.OnKeyDown(e); }
+        { if (CustomInteraction && e.KeyCode == Keys.Space) { keyPressed = true; Invalidate(); } base.OnKeyDown(e); }
         protected override void OnKeyUp(KeyEventArgs e)
-        { if (ActionIcon != CompanionActionIcon.None && e.KeyCode == Keys.Space) { keyPressed = false; Invalidate(); } base.OnKeyUp(e); }
+        { if (CustomInteraction && e.KeyCode == Keys.Space) { keyPressed = false; Invalidate(); } base.OnKeyUp(e); }
         protected override void OnPaint(PaintEventArgs e)
         {
+            if (IsMemeChip) { PaintMemeChip(e.Graphics); return; }
             if (ActionIcon != CompanionActionIcon.None) { PaintAction(e.Graphics); return; }
             Graphics g = e.Graphics;
             g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -195,6 +198,37 @@ namespace NaiwaDesktop
             TextRenderer.DrawText(g, Text, Font, new Rectangle(2, 1, Width - 4, Height - 2), !Enabled ? CompanionStyle.Muted : Selected ? CompanionStyle.Card : CompanionStyle.Green, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             if (Focused && ShowFocusCues)
                 using (Pen pen = new Pen(CompanionStyle.Muted)) { pen.DashStyle = DashStyle.Dot; using (GraphicsPath p = CompanionStyle.Rounded(new RectangleF(3, 3, Width - 7, Height - 7), 7)) g.DrawPath(pen, p); }
+        }
+
+        private void PaintMemeChip(Graphics g)
+        {
+            g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
+            float unit = g.DpiX / 96f;
+            bool hover = Enabled && (over || Focused && ShowFocusCues);
+            bool down = Enabled && (pressed && over || keyPressed);
+            Color fill = Selected ? Color.FromArgb(220, 234, 201) : Color.FromArgb(243, 244, 232);
+            Color ink = Selected ? CompanionStyle.Green : Color.FromArgb(107, 125, 92);
+            if (hover) fill = Selected ? Color.FromArgb(210, 226, 188) : Color.FromArgb(231, 238, 216);
+            if (down) fill = Color.FromArgb(207, 222, 183);
+            if (!Enabled) { fill = Color.FromArgb(246, 246, 237); ink = Color.FromArgb(169, 177, 155); }
+            RectangleF pill = new RectangleF(0, (down ? 2 : 1) * unit, Width, Height - 3 * unit);
+            CompanionStyle.Fill(g, fill, pill, pill.Height / 2);
+            TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            int textWidth = TextRenderer.MeasureText(g, Text, Font, new Size(1000, Height), flags).Width;
+            float mark = 10 * unit, gap = 7 * unit, total = mark + gap + textWidth;
+            float left = (Width - total) / 2, middle = pill.Y + pill.Height / 2;
+            using (SolidBrush brush = new SolidBrush(ink))
+            {
+                if (Selected)
+                {
+                    CompanionStyle.Fill(g, ink, new RectangleF(left, middle - 3 * unit, 2 * unit, 6 * unit), unit);
+                    CompanionStyle.Fill(g, ink, new RectangleF(left + 4 * unit, middle - 5 * unit, 2 * unit, 10 * unit), unit);
+                    CompanionStyle.Fill(g, ink, new RectangleF(left + 8 * unit, middle - 4 * unit, 2 * unit, 8 * unit), unit);
+                }
+                else g.FillPolygon(brush, new PointF[] { new PointF(left + 2 * unit, middle - 4.5f * unit), new PointF(left + 2 * unit, middle + 4.5f * unit), new PointF(left + 9 * unit, middle) });
+            }
+            Rectangle text = Rectangle.Round(new RectangleF(left + mark + gap, pill.Y, textWidth + unit, pill.Height));
+            TextRenderer.DrawText(g, Text, Font, text, ink, flags | TextFormatFlags.VerticalCenter);
         }
 
         // Action buttons share a flat, borderless surface and hand drawn
@@ -387,7 +421,7 @@ namespace NaiwaDesktop
             { g.DrawLine(pen, 26, 188, 26, 202); g.DrawLine(pen, 19, 195, 33, 195); }
             g.Restore(state);
             int scale = Math.Max(1, (int)Math.Min(21200.0 / assets.Width * Width / 246, 23600.0 / assets.Height * Height / 242));
-            using (Bitmap frame = Renderer.Render(assets, pet.Motion, scale))
+            using (Bitmap frame = pet.RenderCompanionPreview(scale))
             {
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.DrawImageUnscaled(frame, (Width - frame.Width) / 2, (Height - frame.Height) / 2);
@@ -405,6 +439,8 @@ namespace NaiwaDesktop
         private readonly CompanionScale scale;
         private readonly Label scaleValue, status, timerLabel, timerHint;
         private readonly CompanionButton restMode, focusMode, start, reset, laugh, stand, home;
+        private readonly CompanionButton[] memeChips;
+        private readonly ToolTip memeTips = new ToolTip { InitialDelay = 350, ReshowDelay = 150, AutoPopDelay = 7000, ShowAlways = true };
         private readonly CompanionProgress progress;
         private bool syncing;
         private string lastStatus;
@@ -439,7 +475,12 @@ namespace NaiwaDesktop
             AddLabel(hero, "今天也请多关照", 280, 22, 355, 23, 9f, CompanionStyle.Muted, FontStyle.Regular);
             AddLabel(hero, "你忙你的，我陪着。", 276, 52, 375, 40, 19.5f, CompanionStyle.Green, FontStyle.Bold);
             status = AddLabel(hero, "● 正在发呆，偶尔眨眨眼", 280, 102, 365, 24, 9.5f, CompanionStyle.Green, FontStyle.Regular);
-            AddLabel(hero, "戳戳软肚皮，收获一点好心情。\n双击奶蛙，让快乐晃起来。", 280, 134, 365, 43, 9f, CompanionStyle.Muted, FontStyle.Regular);
+            status.Name = "pet-status"; status.AccessibleName = "奶蛙当前状态";
+            memeChips = new CompanionButton[] {
+                MemeChip(hero, "憋笑", "holdlaugh", "憋笑绷不住", 280, 112),
+                MemeChip(hero, "摇头晃脑", "headbob", "摇头晃脑", 400, 124),
+                MemeChip(hero, "闪身步", "shufflestep", "闪身步", 532, 124)
+            };
             laugh = Button(hero, "让它大笑", 278, 187, 122, 44, true);
             stand = Button(hero, "站起来", 406, 187, 122, 44, false);
             home = Button(hero, "回到右下角", 534, 187, 124, 44, false);
@@ -448,7 +489,7 @@ namespace NaiwaDesktop
             home.ActionIcon = CompanionActionIcon.Home;
             laugh.AccessibleName = "让它大笑"; stand.AccessibleName = "站起来"; home.AccessibleName = "回到右下角";
             laugh.AccessibleDescription = "播放奶蛙的原版大笑动作";
-            stand.AccessibleDescription = "停止大笑或从躺平姿势站起来";
+            stand.AccessibleDescription = "停止当前动作，或从躺平姿势站起来";
             home.AccessibleDescription = "让奶蛙回到鼠标所在屏幕的右下角";
             laugh.Click += delegate { pet.Laugh(); RefreshPet(); };
             stand.Click += delegate { pet.StopLaugh(); RefreshPet(); };
@@ -510,6 +551,16 @@ namespace NaiwaDesktop
         { Label label = CompanionStyle.Label(text, x, y, width, height, size, color, fontStyle); parent.Controls.Add(label); return label; }
         private static CompanionButton Button(Control parent, string text, int x, int y, int width, int height, bool accent)
         { CompanionButton button = new CompanionButton(text) { Location = new Point(x, y), Size = new Size(width, height), Accent = accent }; parent.Controls.Add(button); return button; }
+        private CompanionButton MemeChip(Control parent, string text, string id, string fullName, int x, int width)
+        {
+            CompanionButton button = Button(parent, text, x, 139, width, 32, false);
+            button.IsMemeChip = true; button.Tag = id; button.Name = "meme-" + id;
+            button.AccessibleName = fullName;
+            button.AccessibleDescription = "点击播放或重新播放；点站起来停止动作";
+            memeTips.SetToolTip(button, fullName + "\n点击播放或重新播放；点“站起来”停止。");
+            button.Click += delegate { pet.PlayMeme(id); RefreshPet(); };
+            return button;
+        }
         private static CompanionSwitch Switch(Control parent, string text, int y)
         { CompanionSwitch toggle = new CompanionSwitch(text) { Location = new Point(20, y), Size = new Size(286, 29) }; parent.Controls.Add(toggle); return toggle; }
         private void SyncSettings()
@@ -523,10 +574,16 @@ namespace NaiwaDesktop
             bool playing = pet.Motion.Playing;
             laugh.SetActionState(playing, playing ? "大笑中" : null);
             laugh.Enabled = !pet.HiddenForFullscreen && !playing;
-            stand.Enabled = !pet.HiddenForFullscreen && (playing || pet.Motion.Resting);
+            stand.Enabled = !pet.HiddenForFullscreen && (playing || pet.Motion.Resting || pet.MemePlaying);
+            foreach (CompanionButton chip in memeChips)
+            {
+                chip.Enabled = pet.CanPlayMeme;
+                bool selected = pet.MemePlaying && String.Equals((string)chip.Tag, pet.MemeId, StringComparison.Ordinal);
+                if (chip.Selected != selected) { chip.Selected = selected; chip.Invalidate(); }
+            }
             bool returned = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency < homeFeedbackUntil;
             home.SetActionState(returned, returned ? "已回到角落" : null);
-            string text = pet.HiddenForFullscreen ? "● 全屏中，奶蛙先安静躲一会儿" : pet.Motion.Playing ? "● 哈哈哈，快乐正在发生" : pet.Motion.Resting ? "● 笑累了，躺平充个电" : pet.Motion.Holding ? "● 被你捧起来啦" : pet.Motion.Poking ? "● 肚皮软软，烦恼散散" : "● 正在发呆，偶尔眨眨眼";
+            string text = pet.HiddenForFullscreen ? "● 全屏中，奶蛙先安静躲一会儿" : pet.MemePlaying ? "● 正在" + pet.MemeName + " · 站起来可停止" : pet.Motion.Playing ? "● 哈哈哈，快乐正在发生" : pet.Motion.Resting ? "● 笑累了，躺平充个电" : pet.Motion.Holding ? "● 被你捧起来啦" : pet.Motion.Poking ? "● 肚皮软软，烦恼散散" : !pet.CanPlayMeme ? "● 新动作素材未安装，原版陪伴可用" : "● 正在发呆，偶尔眨眨眼";
             if (lastStatus != text) { status.Text = text; lastStatus = text; }
             preview.Invalidate();
         }
@@ -555,7 +612,7 @@ namespace NaiwaDesktop
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { previewTimer.Stop(); previewTimer.Dispose(); controller.Dispose(); }
+            if (disposing) { previewTimer.Stop(); previewTimer.Dispose(); controller.Dispose(); memeTips.Dispose(); }
             base.Dispose(disposing);
         }
     }
@@ -588,6 +645,45 @@ namespace NaiwaDesktop
             // Exercise the same protected event path as WinForms, keeping
             // screenshots deterministic without moving the user's pointer.
             typeof(Control).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(control, new object[] { args });
+        }
+        private static void RunMemeUI(PetWindow pet, CompanionWindow panel, string folder, List<string> log)
+        {
+            string[] labels = { "憋笑", "摇头晃脑", "闪身步" };
+            string[] ids = { "holdlaugh", "headbob", "shufflestep" };
+            CompanionButton[] chips = new CompanionButton[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                chips[i] = Find<CompanionButton>(panel, labels[i]);
+                Check(chips[i] != null, "companion offers the " + ids[i] + " animation chip", log);
+            }
+            Label status = panel.Controls.Find("pet-status", true)[0] as Label;
+            if (!pet.CanPlayMeme)
+            {
+                Check(!chips[0].Enabled && !chips[1].Enabled && !chips[2].Enabled && status.Text.Contains("素材未安装"), "missing meme resources disable chips and explain their availability", log);
+                return;
+            }
+            CompanionButton laugh = Find<CompanionButton>(panel, "让它大笑");
+            CompanionButton stand = Find<CompanionButton>(panel, "站起来");
+            for (int i = 0; i < chips.Length; i++)
+            {
+                chips[i].PerformClick();
+                Check(pet.MemePlaying && pet.MemeId == ids[i] && !pet.Motion.Playing, "companion chip plays or switches to " + ids[i], log);
+                Check(chips[i].Enabled && chips[i].Selected && stand.Enabled && laugh.Enabled && status.Text.Contains(pet.MemeName), "companion " + ids[i] + " state offers replay, stop and original laughter", log);
+                Capture(panel, folder, "companion-meme-" + ids[i] + ".png");
+            }
+            Check(pet.PlayMeme(ids[2]) && pet.MemePlaying && pet.MemeId == ids[2], "the current meme can be played again without stopping first", log);
+            stand.PerformClick();
+            Check(!pet.MemePlaying && !stand.Enabled && !chips[0].Selected && !chips[1].Selected && !chips[2].Selected, "companion standing stops the meme and clears its selection", log);
+            laugh.PerformClick(); chips[0].PerformClick();
+            Check(pet.MemePlaying && pet.MemeId == ids[0] && !pet.Motion.Playing, "companion meme chip can interrupt original laughter", log);
+            laugh.PerformClick();
+            Check(pet.Motion.Playing && !pet.MemePlaying && !laugh.Enabled && stand.Enabled, "original laughter can interrupt a meme through the primary action", log);
+            stand.PerformClick();
+            chips[1].PerformClick(); pet.ApplyFullscreen(true);
+            panel.Hide(); panel.Show(); Application.DoEvents();
+            Check(!pet.MemePlaying && !chips[0].Enabled && !chips[1].Enabled && !chips[2].Enabled, "fullscreen hiding stops a meme and disables every animation chip", log);
+            pet.ApplyFullscreen(false); panel.Hide(); panel.Show(); Application.DoEvents();
+            Check(chips[0].Enabled && chips[1].Enabled && chips[2].Enabled, "leaving fullscreen restores meme controls", log);
         }
         internal static void Run(Assets assets, string folder, List<string> log)
         {
@@ -648,6 +744,7 @@ namespace NaiwaDesktop
                 pet.ApplyFullscreen(true); panel.Hide(); panel.Show(); Application.DoEvents();
                 Check(!laugh.Enabled && !stand.Enabled && home.Enabled, "companion fullscreen hiding disables unavailable actions while preserving home", log);
                 pet.ApplyFullscreen(false); panel.Hide(); panel.Show(); Application.DoEvents();
+                RunMemeUI(pet, panel, folder, log);
                 CompanionSwitch top = Find<CompanionSwitch>(panel, "置顶显示");
                 bool oldTop = pet.TopMost; top.Checked = !oldTop;
                 Check(pet.TopMost != oldTop, "companion preference toggle updates the pet", log);

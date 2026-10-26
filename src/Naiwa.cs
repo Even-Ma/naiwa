@@ -101,6 +101,7 @@ namespace NaiwaDesktop
         private readonly Dictionary<int,Bitmap> cache=new Dictionary<int,Bitmap>();
         private readonly Queue<int> order=new Queue<int>();
         internal readonly string AudioPath;
+        internal readonly SpriteActionLibrary Memes;
         internal int CacheCount{get{return cache.Count;}}
         internal Assets(string folder)
         {
@@ -120,6 +121,7 @@ namespace NaiwaDesktop
                 encoded=new byte[Count][];
                 for(int i=0;i<Count;i++)encoded[i]=Read(zip,"laugh/"+i.ToString("0000")+".png");
             }
+            Memes=new SpriteActionLibrary(Path.Combine(folder,"actions"),Width,Height);
             // Warm up the first frames before the first double click.
             Frame(0);Frame(1);Frame(2);
         }
@@ -143,11 +145,12 @@ namespace NaiwaDesktop
             b=Decode(encoded[index]);cache.Add(index,b);order.Enqueue(index);
             while(order.Count>12){int old=order.Dequeue();cache[old].Dispose();cache.Remove(old);}return b;
         }
-        public void Dispose(){if(eyes!=null)foreach(Bitmap b in eyes)if(b!=null)b.Dispose();if(blinks!=null)foreach(Bitmap[] bank in blinks)foreach(Bitmap b in bank)if(b!=null)b.Dispose();foreach(Bitmap b in cache.Values)b.Dispose();cache.Clear();}
+        public void Dispose(){if(Memes!=null)Memes.Dispose();if(eyes!=null)foreach(Bitmap b in eyes)if(b!=null)b.Dispose();if(blinks!=null)foreach(Bitmap[] bank in blinks)foreach(Bitmap b in bank)if(b!=null)b.Dispose();foreach(Bitmap b in cache.Values)b.Dispose();cache.Clear();}
     }
 
     internal sealed class Motion
     {
+        internal readonly MemePlayback Meme=new MemePlayback();
         private const double PokeDuration=.95;
         internal double Look,Start=-1,Elapsed,Clock,BlinkStart=-1,NextBlink=4,WakeStart=-1;
         internal double PokeStart=-1,PokeX=144,PokeY=205,LandingStart=-1,DragAngle;
@@ -165,14 +168,14 @@ namespace NaiwaDesktop
         private readonly Random random=new Random();
         internal void Update(double now,bool over,double duration,double blinkDuration)
         {
-            Clock=now;double dt=previous<0?0:Math.Min(.05,Math.Max(0,now-previous));previous=now;
+            Clock=now;Meme.Update(now);double dt=previous<0?0:Math.Min(.05,Math.Max(0,now-previous));previous=now;
             double goal=over?1:0,step=dt/.18;Look+=Math.Max(-step,Math.Min(step,goal-Look));
             if(Playing){Elapsed=Math.Max(0,now-Start);if(Elapsed>=duration){Start=-1;Elapsed=duration;Resting=true;}}
             if(Waking&&now-WakeStart>=.24)WakeStart=-1;
             if(Poking&&now-PokeStart>=PokeDuration)PokeStart=-1;
             if(Landing&&now-LandingStart>=.9)LandingStart=-1;
             if(Blinking&&now-BlinkStart>=blinkDuration){BlinkStart=-1;ScheduleBlink(now);}
-            if(!Playing&&!Resting&&!Holding&&!Landing&&!Poking&&!Waking&&!Blinking&&now>=NextBlink)BlinkStart=now;
+            if(!Playing&&!Meme.IsPlaying&&!Resting&&!Holding&&!Landing&&!Poking&&!Waking&&!Blinking&&now>=NextBlink)BlinkStart=now;
             if(!Holding||now-lastDragTime>.10)dragTarget=0;
             // Critically damped tilt; bounded steps keep long timer gaps stable.
             int steps=Math.Max(1,(int)Math.Ceiling(dt/.008));double stepTime=dt/steps;
@@ -181,7 +184,7 @@ namespace NaiwaDesktop
             if(!Holding&&Math.Abs(DragAngle)<.02&&Math.Abs(dragVelocity)<.05){DragAngle=0;dragVelocity=0;}
         }
         private void ScheduleBlink(double now){NextBlink=now+4+random.NextDouble()*4;}
-        private void ClearEffects(double now){Clock=now;BlinkStart=PokeStart=WakeStart=LandingStart=-1;Holding=false;DragAngle=dragTarget=dragVelocity=0;ScheduleBlink(now);}
+        private void ClearEffects(double now){Meme.Stop();Clock=now;BlinkStart=PokeStart=WakeStart=LandingStart=-1;Holding=false;DragAngle=dragTarget=dragVelocity=0;ScheduleBlink(now);}
         internal bool Laugh(double now){if(Playing)return false;ClearEffects(now);Resting=false;Start=now;Elapsed=0;PlayCount++;return true;}
         internal void Stop(){Start=-1;Elapsed=0;Resting=false;ClearEffects(Clock);}
         internal void Stand(double now){if(!Resting)return;Resting=false;ClearEffects(now);WakeStart=now;}
@@ -315,7 +318,8 @@ namespace NaiwaDesktop
                     g.ScaleTransform(m.Holding?1.008f:1+s,m.Holding?1.018f:1-s);g.TranslateTransform(-px,-py);
                 }
                 Rectangle rect=new Rectangle(0,0,w,h);
-                if(m.Resting)Draw(g,assets.Frame(assets.Count-1),rect,1);
+                if(m.Meme.IsPlaying)Draw(g,assets.Memes.GetFrame(m.Meme.Current.Id,m.Meme.FrameIndex),rect,1);
+                else if(m.Resting)Draw(g,assets.Frame(assets.Count-1),rect,1);
                 else if(m.Waking){float t=(float)Math.Min(1,(m.Clock-m.WakeStart)/.24);Draw(g,assets.Frame(assets.Count-1),rect,1-t);Draw(g,assets.Eye(m.Look),rect,t);}
                 else if(!m.Playing)
                 {
@@ -385,11 +389,15 @@ namespace NaiwaDesktop
         internal int ScalePercent{get{return settings.Scale;}}
         internal bool SoundEnabled{get{return settings.Sound;}}
         internal bool AutoHideEnabled{get{return settings.AutoHide;}}
+        internal bool MemePlaying{get{return Motion.Meme.IsPlaying;}}
+        internal string MemeName{get{return Motion.Meme.Current==null?"":Motion.Meme.Current.Name;}}
+        internal string MemeId{get{return Motion.Meme.Current==null?"":Motion.Meme.Current.Id;}}
+        internal bool CanPlayMeme{get{return assets.Memes.Count>0&&!HiddenForFullscreen&&!Motion.Holding;}}
         private double Now{get{return watch.Elapsed.TotalSeconds;}}
 
         internal PetWindow(Assets a,bool test)
         {
-            assets=a;testing=test;settings=testing?new Settings():Settings.Load();
+            assets=a;testing=test;settings=testing?new Settings():Settings.Load();Motion.Meme.Bind(a.Memes);
             Text=Native.Title;FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;StartPosition=FormStartPosition.Manual;AutoScaleMode=AutoScaleMode.None;
             SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.StandardClick|ControlStyles.StandardDoubleClick,true);
             ClientSize=SizeFor(settings.Scale);TopMost=settings.OnTop;Cursor=Cursors.Hand;
@@ -423,10 +431,17 @@ namespace NaiwaDesktop
         private ContextMenuStrip BuildMenu()
         {
             ContextMenuStrip result=new ContextMenuStrip{Font=new Font("Microsoft YaHei UI",10f),ShowImageMargin=false};
-            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.3.3") {Enabled=false});
+            result.Items.Add(new ToolStripMenuItem("奶蛙桌宠 · 1.4.0") {Enabled=false});
             result.Items.Add("打开陪伴面板 / 专注计时",null,delegate{OpenCompanion();});result.Items.Add(new ToolStripSeparator());
             result.Items.Add("捧腹大笑（双击）",null,delegate{Laugh();});
             stopItem=new ToolStripMenuItem("停止大笑 / 站起来",null,delegate{if(Motion.Resting){Motion.Stand(Now);RenderNow(true);}else StopLaugh();});result.Items.Add(stopItem);
+            ToolStripMenuItem memes=new ToolStripMenuItem("玩梗动作");
+            foreach(SpriteActionClip clip in assets.Memes.Clips)
+            {
+                string id=clip.Id;ToolStripMenuItem item=new ToolStripMenuItem(clip.Name,null,delegate{PlayMeme(id);});item.Tag="meme:"+id;memes.DropDownItems.Add(item);
+            }
+            if(memes.DropDownItems.Count==0)memes.DropDownItems.Add(new ToolStripMenuItem("动作素材未安装"){Enabled=false});
+            result.Items.Add(memes);
             soundItem=new ToolStripMenuItem("原版笑声",null,delegate{SetSound(!settings.Sound);});result.Items.Add(soundItem);
             result.Items.Add(new ToolStripSeparator());
             ToolStripMenuItem sizes=new ToolStripMenuItem("大小");
@@ -441,8 +456,9 @@ namespace NaiwaDesktop
         }
         private void UpdateMenu()
         {
-            if(menu==null)return;SetToggleMark(soundItem,settings.Sound);soundItem.Enabled=sound!=null;SetToggleMark(topItem,TopMost);stopItem.Enabled=Motion.Playing||Motion.Resting;SetToggleMark(fullscreenItem,settings.AutoHide);
+            if(menu==null)return;SetToggleMark(soundItem,settings.Sound);soundItem.Enabled=sound!=null;SetToggleMark(topItem,TopMost);stopItem.Enabled=Motion.Playing||Motion.Resting||MemePlaying;SetToggleMark(fullscreenItem,settings.AutoHide);
             foreach(ToolStripItem entry in menu.Items){ToolStripMenuItem p=entry as ToolStripMenuItem;if(p==null)continue;foreach(ToolStripItem child in p.DropDownItems){ToolStripMenuItem c=child as ToolStripMenuItem;if(c!=null&&c.Tag is int)c.Checked=(int)c.Tag==settings.Scale;}}
+            foreach(ToolStripItem entry in menu.Items){ToolStripMenuItem parent=entry as ToolStripMenuItem;if(parent==null)continue;foreach(ToolStripItem child in parent.DropDownItems){ToolStripMenuItem item=child as ToolStripMenuItem;string tag=item==null?null:item.Tag as string;if(tag!=null&&tag.StartsWith("meme:",StringComparison.Ordinal)){item.Checked=MemePlaying&&MemeId==tag.Substring(5);item.Enabled=CanPlayMeme;}}}
         }
         private static void SetToggleMark(ToolStripMenuItem item,bool selected)
         {
@@ -458,6 +474,13 @@ namespace NaiwaDesktop
             UpdateMenu();Save();
         }
         internal void SetOnTop(bool enabled){TopMost=enabled;settings.OnTop=enabled;Save();UpdateMenu();}
+        internal Bitmap RenderCompanionPreview(int scale){return Renderer.Render(assets,Motion,scale);}
+        internal bool PlayMeme(string id)
+        {
+            if(!CanPlayMeme||assets.Memes.Find(id)==null)return false;
+            Motion.Stop();if(sound!=null)sound.Stop();
+            bool started=Motion.Meme.Start(id,Now);RenderNow(true);UpdateMenu();return started;
+        }
         internal void OpenCompanion()
         {
             if(disposing)return;
@@ -492,6 +515,7 @@ namespace NaiwaDesktop
         {
             if(!IsHandleCreated||disposing||HiddenForFullscreen)return;
             string key=Motion.Resting?"R":Motion.Playing?"L"+(int)(Motion.Elapsed*assets.Fps):Motion.Blinking?"B"+(Motion.Look>.5?1:0)+"/"+(int)((Motion.Clock-Motion.BlinkStart)*assets.BlinkFps):"E"+(int)Math.Round(Motion.Look*(assets.EyeCount-1));
+            if(MemePlaying)key="M"+MemeId+"/"+Motion.Meme.FrameIndex;
             if(Motion.Poking||Motion.Moving||Motion.Waking)key+="/M"+(int)(Motion.Clock*60);
             key+="/"+settings.Scale;
             if(!force&&key==lastVisual)return;
@@ -705,6 +729,7 @@ namespace NaiwaDesktop
                         Check(opened.WindowState==FormWindowState.Normal&&form.Location==beforeTray,"tray double click restores a minimized panel without moving the pet",log);
                         form.Close();Check(form.IsDisposed&&opened.IsDisposed,"window and tray companion close cleanly",log);
                     }
+                    MemeActionTests.Run(a,folder,log);
                     CompanionTests.Run(a,folder,log);
                     using(Icon icon=Renderer.CreateIcon(a.Eye(0)))using(FileStream f=File.Create(Path.Combine(folder,"naiwa.ico")))icon.Save(f);
                     m=new Motion();

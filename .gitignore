@@ -9,6 +9,9 @@
 /assets/原版笑声.wav
 /assets/naiwa.ico
 /assets/.download-*
+# New action PNGs and their manifest are committed source assets.
+!/assets/actions/
+!/assets/actions/**
 /docs/upstream/*.png
 
 # User and editor state
